@@ -1,6 +1,8 @@
 These rules apply to every task in this project unless explicitly overridden.
 Bias: caution over speed on non-trivial work.
 
+Always we will have a grill-me, to understand the feature.
+
 ## Rule 1 — Think Before Coding
 State assumptions explicitly. Ask rather than guess.
 Push back when a simpler approach exists. Stop when confused.
