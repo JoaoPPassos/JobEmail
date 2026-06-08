@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NodemailerService } from '../../infrastructure/email/nodemailer.service.js';
-import { JobsHttpService } from '../../infrastructure/jobs/jobs-http.service.js';
-import { JobStatusMessage, SendEmail } from '../../domain/email/email.types.js';
+import { NodemailerService } from '../../../infrastructure/email/nodemailer.service.js';
+import { JobsHttpService } from '../../../infrastructure/jobs/jobs-http.service.js';
+import { JobStatusMessage, SendEmail } from '../../../domain/email/email.types.js';
 
 @Injectable()
 export class EmailService {

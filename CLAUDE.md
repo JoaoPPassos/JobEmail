@@ -56,6 +56,7 @@ Default to surfacing uncertainty, not hiding it.
 
 ---
 
+
 ## Architecture
 
 This project follows **Clean Architecture** with NestJS. Three main layers:
@@ -67,3 +68,48 @@ src/
 ├── modules/         # Feature modules (HTTP layer: controllers, services, DTOs)
 └── shared/          # Cross-cutting: base entity, enums, guards, response wrappers
 ```
+
+### Layer rules
+
+**domain/**
+- `entities/` — TypeORM entities that extend `BaseEntity` (id, created_at, updated_at, deleted_at).
+- `ports/` — Interface contracts (prefixed with `I`). Define what infrastructure must implement. Never import from `modules/` or `infrastructure/`.
+- `use-cases/` — Pure orchestration logic. No NestJS decorators. Receive all deps via constructor. One use-case per action (e.g. `CreateApplicationUseCase`).
+
+**infrastructure/**
+- `repositories/` — Implement domain ports. Use TypeORM's `@InjectRepository`. Handle all DB queries. Throw custom exceptions from `shared/exceptions/`.
+- `messaging/` — RabbitMQ publishers using `@golevelup/nestjs-rabbitmq`. Exchange `"jobs"`, routing key `"job.enrich"` for job enrichment flow.
+- `services/` — External service adapters (LinkedIn processor, hashing, email). Implement domain port interfaces.
+- `migrations/` — All schema changes go through TypeORM migrations. Never alter the DB schema by hand.
+
+**modules/**
+- Each feature module must have: `controllers/`, `services/`, `dto/`, `interfaces/`, `tests/`.
+- Controllers handle HTTP only — no business logic. Return `SuccessResponse<T>`.
+- Services instantiate use-cases with their dependencies inline (not provided by the container).
+- DTOs use `class-validator` decorators. Swagger `@ApiProperty` on every field.
+
+**shared/**
+- `BaseEntity` — always extend this for new entities.
+- `SuccessResponse<T>` / `FailResponse` — always wrap controller return values.
+- `shared/enums/` — enums used by more than one module go here.
+- `shared/exceptions/` — use existing custom exceptions; don't throw raw NestJS `HttpException` in repositories.
+
+### Naming conventions
+
+| Artifact | Convention | Example |
+|---|---|---|
+| Files | kebab-case | `create-user.use-case.ts` |
+| Classes | PascalCase | `CreateUserUseCase` |
+| Interfaces | `I` prefix | `IAuth`, `IJob` |
+| Enums | snake_case values | `application_status` |
+| Entity columns | snake_case | `salary_range`, `source_url` |
+| DTOs | `{Action}{Entity}DTO` | `UpdateJobMetadataDTO` |
+| Tests | same name + `.spec.ts` | `jobs.service.spec.ts` |
+
+### Key patterns
+
+- **Repository types**: Use `Partial<Omit<Entity, baseOmit>>` for update/save payloads. `baseOmit = 'id' | 'created_at' | 'updated_at' | 'deleted_at'`.
+- **Use-case wiring**: Services `new UseCase(repo, dep)` inside method scope — do not inject use-cases via the NestJS container.
+- **Job enrichment flow**: `POST /job-applications` → publisher sends `{ jobId, sourceUrl, sourcePlatform }` to RabbitMQ → external worker scrapes metadata → `PATCH /jobs/:id/metadata` sets `metadata_status: 'completed'`.
+- **Auth**: `JwtAuthGuard` on all protected routes. JWT secret from `config/configuration.ts`.
+- **Soft delete**: `deleted_at` column on all entities; never hard-delete rows.

@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
-import { EmailService } from '../../modules/email/email.service.js';
+import { EmailService } from '../../modules/email/service/email.service.js';
 import { JobStatusMessage } from '../../domain/email/email.types.js';
 
 const QUEUE_NAME = 'job.status.update';
@@ -31,6 +31,7 @@ export class RabbitmqConsumer implements OnModuleInit, OnModuleDestroy {
         const payload: JobStatusMessage = JSON.parse(msg.content.toString());
         await this.emailService.processJobStatusUpdate(payload);
         this.channel.ack(msg);
+        this.logger.log(`Scan finished for job ${payload.jobId} — status: ${payload.status}`);
       } catch (err) {
         this.logger.error('Failed to process message', err);
         this.channel.nack(msg, false, false);
