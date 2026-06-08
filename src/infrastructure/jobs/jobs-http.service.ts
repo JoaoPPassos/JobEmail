@@ -13,14 +13,16 @@ export class JobsHttpService {
     this.baseUrl = `http://localhost:${port}`;
   }
 
-  async updateJobMetadata(jobId: string, data: JobDataProcessed): Promise<void> {
-    const url = `${this.baseUrl}/jobs/${jobId}/metadata`;
-    this.logger.log(`[updateJobMetadata] PATCH ${url} — body=${JSON.stringify(data)}`);
+  async updateJobMetadata(
+    jobId: string,
+    data: JobDataProcessed,
+  ): Promise<void> {
     try {
-      await axios.patch(url, data);
-      this.logger.log(`[updateJobMetadata] Success — jobId=${jobId} status="${data.status}"`);
-    } catch (err: any) {
-      this.logger.error(`[updateJobMetadata] Failed — jobId=${jobId} status="${data.status}" error=${err?.message}`);
+      await axios.patch(`${this.baseUrl}/jobs/${jobId}/metadata`, data);
+    } catch (err) {
+      this.logger.error(
+        `[updateJobMetadata] Failed — jobId=${jobId} error=${(err as Error)?.message}`,
+      );
       throw err;
     }
   }

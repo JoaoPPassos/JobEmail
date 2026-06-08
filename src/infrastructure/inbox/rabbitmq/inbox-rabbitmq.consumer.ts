@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
 import { MongoUserInboxRepository } from '../mongo/repositories/mongo-user-inbox.repository.js';
@@ -9,14 +14,23 @@ const QUEUES = {
   credentialsUpdated: 'user.email.credentials.updated',
 } as const;
 
-type JobCreatedPayload = { userId: string; jobId: string; company: string; role: string };
-type CredentialsUpdatedPayload = { userId: string; email: string; password: string };
+type JobCreatedPayload = {
+  userId: string;
+  jobId: string;
+  company: string;
+  role: string;
+};
+type CredentialsUpdatedPayload = {
+  userId: string;
+  email: string;
+  password: string;
+};
 
 @Injectable()
 export class InboxRabbitmqConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(InboxRabbitmqConsumer.name);
-  private connection: amqp.ChannelModel;
-  private channel: amqp.Channel;
+  private connection!: amqp.ChannelModel;
+  private channel!: amqp.Channel;
 
   constructor(
     private readonly configService: ConfigService,
@@ -34,38 +48,55 @@ export class InboxRabbitmqConsumer implements OnModuleInit, OnModuleDestroy {
       await this.channel.assertQueue(queue, { durable: true });
     }
 
-    this.logger.log(`Subscribed to queues: ${Object.values(QUEUES).join(', ')}`);
+    this.logger.log(
+      `Subscribed to queues: ${Object.values(QUEUES).join(', ')}`,
+    );
 
-    await this.channel.consume(QUEUES.jobCreated, async (msg) => {
+    await this.channel.consume(QUEUES.jobCreated, (msg) => {
       if (!msg) return;
-      this.logger.log(`[job.created] Message received`);
-      try {
-        const payload: JobCreatedPayload = JSON.parse(msg.content.toString());
-        this.logger.log(`[job.created] Payload: userId=${payload.userId} jobId=${payload.jobId} company="${payload.company}" role="${payload.role}"`);
-        const { userId, ...job } = payload;
-        await this.userInboxRepo.addJob(userId, job);
-        this.channel.ack(msg);
-        this.logger.log(`[job.created] Job ${job.jobId} saved for user ${userId}`);
-      } catch (err) {
-        this.logger.error('[job.created] Failed to process message', err);
-        this.channel.nack(msg, false, false);
-      }
+      void (async () => {
+        try {
+          const payload = JSON.parse(
+            msg.content.toString(),
+          ) as JobCreatedPayload;
+          const { userId, ...job } = payload;
+          await this.userInboxRepo.addJob(userId, job);
+          this.channel.ack(msg);
+          this.logger.log(
+            `[job.created] jobId=${job.jobId} saved for userId=${userId}`,
+          );
+        } catch (err) {
+          this.logger.error('[job.created] Failed to process message', err);
+          this.channel.nack(msg, false, false);
+        }
+      })();
     });
 
-    await this.channel.consume(QUEUES.credentialsUpdated, async (msg) => {
+    await this.channel.consume(QUEUES.credentialsUpdated, (msg) => {
       if (!msg) return;
-      this.logger.log(`[user.email.credentials.updated] Message received`);
-      try {
-        const payload: CredentialsUpdatedPayload = JSON.parse(msg.content.toString());
-        this.logger.log(`[user.email.credentials.updated] Payload: userId=${payload.userId} email=${payload.email}`);
-        const encryptedPassword = this.encryptionService.encrypt(payload.password);
-        await this.userInboxRepo.upsertCredentials(payload.userId, payload.email, encryptedPassword);
-        this.channel.ack(msg);
-        this.logger.log(`[user.email.credentials.updated] Credentials saved for user ${payload.userId}`);
-      } catch (err) {
-        this.logger.error('[user.email.credentials.updated] Failed to process message', err);
-        this.channel.nack(msg, false, false);
-      }
+      void (async () => {
+        try {
+          const payload = JSON.parse(
+            msg.content.toString(),
+          ) as CredentialsUpdatedPayload;
+          const encryptedPassword = this.encryptionService.encrypt(
+            payload.password,
+          );
+          await this.userInboxRepo.upsertCredentials(
+            payload.userId,
+            payload.email,
+            encryptedPassword,
+          );
+          this.channel.ack(msg);
+          this.logger.log(`[credentials.updated] userId=${payload.userId}`);
+        } catch (err) {
+          this.logger.error(
+            '[credentials.updated] Failed to process message',
+            err,
+          );
+          this.channel.nack(msg, false, false);
+        }
+      })();
     });
   }
 

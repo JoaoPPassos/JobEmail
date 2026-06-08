@@ -46,9 +46,7 @@ export class ImapInboxService {
   ): Promise<InboxEmail[]> {
     const host = resolveImapHost(email);
     const port = this.configService.get<number>('IMAP_PORT', 993);
-    this.logger.log(
-      `[fetchRecentEmails] Connecting to ${host}:${port} for ${email} (lookback ${lookbackMinutes}min)`,
-    );
+    this.logger.log(`Connecting to ${host}:${port} for ${email}`);
 
     const client = new ImapFlow({
       host,
@@ -59,22 +57,14 @@ export class ImapInboxService {
     });
 
     await client.connect();
-    this.logger.log(`[fetchRecentEmails] Connected to IMAP for ${email}`);
 
     const lock = await client.getMailboxLock('INBOX');
     const emails: InboxEmail[] = [];
 
     try {
       const since = new Date(Date.now() - lookbackMinutes * 60 * 1000);
-      this.logger.log(
-        `[fetchRecentEmails] Searching emails since ${since.toISOString()}`,
-      );
-
       const result = await client.search({ since }, { uid: true });
       const uids = result === false ? [] : result;
-      this.logger.log(
-        `[fetchRecentEmails] Found ${uids.length} email(s) in range`,
-      );
 
       if (uids.length === 0) return emails;
 
@@ -89,17 +79,11 @@ export class ImapInboxService {
         const parsed = await simpleParser(msg.source ?? Buffer.alloc(0));
         const body = parsed.text ?? (parsed.html ? stripHtml(parsed.html) : '');
 
-        this.logger.log(
-          `[fetchRecentEmails] UID=${msg.uid} from="${from}" subject="${subject}" bodyLength=${body.length}`,
-        );
         emails.push({ uid: msg.uid, subject, body, from });
       }
     } finally {
       lock.release();
       await client.logout();
-      this.logger.log(
-        `[fetchRecentEmails] Disconnected from IMAP for ${email}`,
-      );
     }
 
     return emails;

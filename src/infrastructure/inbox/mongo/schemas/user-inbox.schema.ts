@@ -26,7 +26,13 @@ export class UserInboxEntity {
     ],
     default: [],
   })
-  jobs: Array<{ jobId: string; company: string; role: string; status: string; lastStatusChangedAt: Date }>;
+  jobs: Array<{
+    jobId: string;
+    company: string;
+    role: string;
+    status: string;
+    lastStatusChangedAt: Date;
+  }>;
 }
 
 export const UserInboxSchema = SchemaFactory.createForClass(UserInboxEntity);

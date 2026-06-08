@@ -18,22 +18,17 @@ export class MongoUserInboxRepository {
     email: string,
     encryptedPassword: string,
   ): Promise<void> {
-    this.logger.log(
-      `[upsertCredentials] Upserting credentials for userId=${userId} email=${email}`,
-    );
-    const result = await this.model.findOneAndUpdate(
+    await this.model.findOneAndUpdate(
       { userId },
       { $set: { email, encryptedPassword } },
       { upsert: true, returnDocument: 'after' },
     );
-    this.logger.log(`[upsertCredentials] Done — _id=${String(result?._id)}`);
   }
 
   async addJob(
     userId: string,
     job: Pick<WatchedJob, 'jobId' | 'company' | 'role'>,
   ): Promise<void> {
-    this.logger.log(`[addJob] Adding jobId=${job.jobId} to userId=${userId}`);
     const jobDoc = {
       jobId: job.jobId,
       company: job.company,
@@ -47,10 +42,8 @@ export class MongoUserInboxRepository {
     );
     if (!result) {
       this.logger.warn(
-        `[addJob] No document updated — userId=${userId} may not exist yet or jobId=${job.jobId} already present`,
+        `[addJob] No document updated — userId=${userId} jobId=${job.jobId} may not exist or already present`,
       );
-    } else {
-      this.logger.log(`[addJob] Job added — _id=${String(result._id)}`);
     }
   }
 
@@ -59,9 +52,6 @@ export class MongoUserInboxRepository {
     jobId: string,
     status: string,
   ): Promise<void> {
-    this.logger.log(
-      `[updateJobStatus] userId=${userId} jobId=${jobId} → status=${status}`,
-    );
     await this.model.updateOne(
       { userId, 'jobs.jobId': jobId },
       {
@@ -108,11 +98,8 @@ export class MongoUserInboxRepository {
   }
 
   async findAllWithCredentials(): Promise<UserInbox[]> {
-    this.logger.log('[findAllWithCredentials] Querying users with credentials');
-    const users = await this.model
+    return this.model
       .find({ email: { $exists: true }, encryptedPassword: { $exists: true } })
       .lean<UserInbox[]>();
-    this.logger.log(`[findAllWithCredentials] Found ${users.length} user(s)`);
-    return users;
   }
 }

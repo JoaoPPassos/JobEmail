@@ -6,7 +6,6 @@ import { EmailKeywordClassifier } from '../../infrastructure/inbox/services/emai
 import { EncryptionService } from '../../infrastructure/inbox/services/encryption.service.js';
 import { MongoUserInboxRepository } from '../../infrastructure/inbox/mongo/repositories/mongo-user-inbox.repository.js';
 import { MongoProcessedEmailRepository } from '../../infrastructure/inbox/mongo/repositories/mongo-processed-email.repository.js';
-import { MongoRawEmailRepository } from '../../infrastructure/inbox/mongo/repositories/mongo-raw-email.repository.js';
 import { JobsHttpService } from '../../infrastructure/jobs/jobs-http.service.js';
 import { UserInbox, WatchedJob } from '../../domain/inbox/inbox.types.js';
 import { ApplicationStatus } from '../../domain/email/application-status.enum.js';
@@ -28,7 +27,6 @@ export class InboxScannerService {
     private readonly classifier: EmailKeywordClassifier,
     private readonly userInboxRepo: MongoUserInboxRepository,
     private readonly processedEmailRepo: MongoProcessedEmailRepository,
-    private readonly rawEmailRepo: MongoRawEmailRepository,
     private readonly encryptionService: EncryptionService,
     private readonly jobsHttpService: JobsHttpService,
     private readonly configService: ConfigService,
@@ -51,7 +49,6 @@ export class InboxScannerService {
       return;
     }
 
-    this.logger.log(`Scanning inbox for ${users.length} user(s)`);
     for (const user of users) {
       await this.scanUserInbox(user);
     }
@@ -68,10 +65,7 @@ export class InboxScannerService {
       CONCLUSIVE_STATUSES,
     );
 
-    if (!staleJobs.length) {
-      this.logger.log('No stale jobs found');
-      return;
-    }
+    if (!staleJobs.length) return;
 
     this.logger.log(
       `Found ${staleJobs.length} stale job(s) — marking as no_response`,
@@ -87,21 +81,13 @@ export class InboxScannerService {
           status: ApplicationStatus.no_response,
         });
       } catch {
-        this.logger.error(
-          `[stale] Failed to update jobs API for jobId=${jobId} — MongoDB updated`,
-        );
+        this.logger.error(`[stale] Failed jobs API update — jobId=${jobId}`);
       }
       this.logger.log(`[stale] userId=${userId} jobId=${jobId} → no_response`);
     }
-
-    this.logger.log('─── Stale job check finished ───');
   }
 
   private async scanUserInbox(user: UserInbox): Promise<void> {
-    this.logger.log(
-      `[user=${user.userId}] Starting — watched jobs: ${user.jobs.length}`,
-    );
-
     const activeJobs = user.jobs.filter(
       (j) => !CONCLUSIVE_STATUSES.includes(j.status),
     );
@@ -112,14 +98,9 @@ export class InboxScannerService {
       return;
     }
 
-    this.logger.log(
-      `[user=${user.userId}] Active (non-conclusive) jobs: ${activeJobs.length}`,
-    );
-
     let password: string;
     try {
       password = this.encryptionService.decrypt(user.encryptedPassword);
-      this.logger.log(`[user=${user.userId}] Password decrypted successfully`);
     } catch {
       this.logger.error(
         `[user=${user.userId}] Failed to decrypt password — skipping`,
@@ -200,7 +181,6 @@ export class InboxScannerService {
       this.logger.log(
         `[user=${user.userId}] Match — jobId=${matchedJob.jobId} company="${matchedJob.company}" role="${matchedJob.role}" → status="${status}"`,
       );
-      await this.rawEmailRepo.saveOne(user.userId, email);
       await this.jobsHttpService.updateJobMetadata(matchedJob.jobId, {
         status,
       });

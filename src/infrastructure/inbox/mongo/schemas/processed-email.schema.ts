@@ -29,4 +29,5 @@ export class ProcessedEmailEntity {
   reason!: ProcessedEmailReason;
 }
 
-export const ProcessedEmailSchema = SchemaFactory.createForClass(ProcessedEmailEntity);
+export const ProcessedEmailSchema =
+  SchemaFactory.createForClass(ProcessedEmailEntity);
