@@ -1,13 +1,29 @@
 FROM node:22-alpine AS builder
-WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
-COPY . .
-RUN pnpm build
 
-FROM node:22-alpine AS runner
+RUN apk update && apk upgrade --no-cache
+
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile --prod
+
+COPY package.json ./
+RUN npm install
+
+COPY . .
+RUN npm run build && test -f dist/main.js || (echo "ERROR: dist/main.js not found after build" && exit 1)
+
+
+FROM node:22-alpine AS production
+
+RUN apk update && apk upgrade --no-cache
+
+WORKDIR /app
+
+COPY package.json ./
+RUN npm install --omit=dev
+
 COPY --from=builder /app/dist ./dist
-CMD ["node", "dist/main.js"]
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x entrypoint.sh
+
+EXPOSE 3000
+
+ENTRYPOINT ["./entrypoint.sh"]
