@@ -1,98 +1,142 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# JobHub — Email Worker
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Microserviço responsável por dois fluxos do ecossistema JobHub:
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+1. **Notificações de status** — consome a fila RabbitMQ `job.status.update` e envia e-mails transacionais para o candidato quando o status de uma vaga muda.
+2. **Monitoramento de inbox** — conecta via IMAP ao e-mail de cada usuário, classifica mensagens recebidas de recrutadores com base em palavras-chave e atualiza o status da candidatura automaticamente.
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Arquitetura
 
-## Project setup
-
-```bash
-$ pnpm install
+```
+RabbitMQ                          MongoDB
+    │                                │
+    ├── job.status.update ──► EmailModule ──► Nodemailer ──► Candidato
+    │
+    ├── job.created ──────────────────────────┐
+    └── user.email.credentials.updated ───────┴──► InboxModule
+                                                        │
+                                            Cron (*/5 min) ──► IMAP
+                                                        │       │
+                                                        │   Classifier
+                                                        │       │
+                                                        └──► JobsHttpService ──► API Gateway
 ```
 
-## Compile and run the project
+### Módulos
 
-```bash
-# development
-$ pnpm run start
+| Módulo | Responsabilidade |
+|---|---|
+| `EmailModule` | Consome `job.status.update` e envia e-mail via Nodemailer |
+| `InboxModule` | Gerencia credenciais de inbox, executa scan por cron e classifica e-mails |
 
-# watch mode
-$ pnpm run start:dev
+### Infraestrutura
 
-# production mode
-$ pnpm run start:prod
+| Serviço | Uso |
+|---|---|
+| **MongoDB** | Armazena credenciais de inbox (senha criptografada com AES-256-GCM) e histórico de e-mails processados |
+| **RabbitMQ** | Fonte de eventos: `job.status.update`, `job.created`, `user.email.credentials.updated` |
+| **IMAP** | Acesso ao inbox do usuário para leitura de e-mails recebidos |
+| **SMTP** | Envio de e-mails de notificação via Nodemailer |
+| **JobHub API Gateway** | Destino das atualizações de status (`PATCH /jobs/:id/metadata`) |
+
+---
+
+## Fluxos
+
+### 1. Notificação de status
+
+```
+job.status.update (RabbitMQ)
+  └── { jobId, status, email, userId }
+        └── Nodemailer → e-mail para o candidato
+        └── JobsHttpService → PATCH /jobs/:jobId/metadata { status }
 ```
 
-## Run tests
+### 2. Monitoramento de inbox (cron `*/5 * * * *`)
 
-```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+```
+Para cada usuário com credenciais no MongoDB:
+  1. Descriptografa a senha do inbox (AES-256-GCM)
+  2. Conecta via IMAP e busca e-mails dos últimos N minutos
+  3. Para cada e-mail não processado:
+     a. Classifica por palavras-chave → ApplicationStatus
+     b. Tenta associar ao job ativo (company + role no texto)
+     c. Atualiza status no MongoDB e via API Gateway
+     d. Marca e-mail como processado
 ```
 
-## Deployment
+### 3. Detecção de candidaturas sem resposta (cron diário `0 0 * * *`)
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Candidaturas ativas sem atualização há mais de 14 dias são marcadas como `no_response` automaticamente.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+---
+
+## Status de candidatura
+
+| Status | Descrição |
+|---|---|
+| `applied` | Candidatura enviada |
+| `in_review` | Em análise pelo recrutador |
+| `interview` | Entrevista agendada |
+| `offer` | Oferta recebida |
+| `rejected` | Candidatura rejeitada |
+| `withdrawn` | Candidatura retirada pelo candidato |
+| `no_response` | Sem resposta após 14 dias |
+
+---
+
+## Variáveis de ambiente
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `PORT` | Não (padrão: 3000) | Porta HTTP da aplicação |
+| `MONGODB_URI` | Sim | URI de conexão com o MongoDB |
+| `RABBITMQ_URL` | Sim | URL do broker RabbitMQ |
+| `SMTP_HOST` | Não (padrão: smtp.gmail.com) | Host SMTP |
+| `SMTP_PORT` | Não (padrão: 587) | Porta SMTP |
+| `SMTP_USER` | Sim | Usuário SMTP (remetente) |
+| `SMTP_PASS` | Sim | Senha SMTP |
+| `EMAIL_ENCRYPTION_KEY` | Sim | Chave AES-256 em hex (64 chars) para criptografar senhas de inbox |
+| `JOBS_API_PORT` | Não (padrão: 3000) | Porta da API Gateway para atualização de status |
+| `IMAP_PORT` | Não (padrão: 993) | Porta IMAP |
+| `INBOX_SCAN_CRON` | Não (padrão: `*/5 * * * *`) | Expressão cron do scan de inbox |
+| `INBOX_LOOKBACK_MINUTES` | Não (padrão: 15) | Janela de busca IMAP em minutos |
+| `MONGO_USER` | Sim (Docker) | Usuário root do MongoDB local |
+| `MONGO_PASSWORD` | Sim (Docker) | Senha root do MongoDB local |
+| `MONGO_DB` | Não (padrão: jobhub) | Nome do banco MongoDB |
+| `MONGO_PORT` | Não (padrão: 27017) | Porta exposta do MongoDB local |
+
+---
+
+## Rodando localmente
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+# Instalar dependências
+pnpm install
+
+# Rodar em modo watch
+pnpm run start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Crie um arquivo `.env` na raiz com as variáveis listadas acima.
 
-## Resources
+### Com Docker
 
-Check out a few resources that may come in handy when working with NestJS:
+```bash
+docker compose up -d
+```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+O `docker-compose.yml` sobe a aplicação e um MongoDB local. As variáveis `MONGO_USER`, `MONGO_PASSWORD` e `PORT` precisam estar no `.env`.
 
-## Support
+---
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Deploy
 
-## Stay in touch
+O deploy é feito automaticamente via GitHub Actions ao fazer push na branch `master`. O workflow:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+1. Builda a imagem Docker e publica em `ghcr.io/joaoppassos/jobhub-email-ms:latest`
+2. Aciona o deploy na VPS via Hostinger API
 
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+As variáveis e secrets necessários estão configurados no repositório GitHub (`Settings → Secrets and variables → Actions`).
