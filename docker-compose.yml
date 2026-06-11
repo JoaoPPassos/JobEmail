@@ -5,11 +5,9 @@ services:
     container_name: jobhub-email-ms
     restart: unless-stopped
     ports:
-      - "${PORT}:${PORT}"
+      - "${PORT:-4240}:4240"
     env_file:
       - .env
-    environment:
-      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB:-jobhub}?authSource=admin
     depends_on:
       - mongo
 

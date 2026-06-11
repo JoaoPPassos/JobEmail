@@ -33,26 +33,21 @@ jobs:
           api-key: ${{ secrets.HOSTINGER_API_KEY }}
           virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
           project-name: jobhub-email-ms
-          personal-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           docker-compose-path: docker-compose.yml
           environment-variables: |
             NODE_ENV=production
             PORT=${{ vars.PORT }}
-
+            MONGODB_URI=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017/${{ vars.MONGO_DB }}?authSource=admin
             RABBITMQ_URL=${{ secrets.RABBITMQ_URL }}
-
             SMTP_HOST=${{ vars.SMTP_HOST }}
             SMTP_PORT=${{ vars.SMTP_PORT }}
             SMTP_USER=${{ secrets.SMTP_USER }}
             SMTP_PASS=${{ secrets.SMTP_PASS }}
-
             EMAIL_ENCRYPTION_KEY=${{ secrets.EMAIL_ENCRYPTION_KEY }}
-
             JOBS_API_PORT=${{ vars.JOBS_API_PORT }}
             IMAP_PORT=${{ vars.IMAP_PORT }}
             INBOX_SCAN_CRON=${{ vars.INBOX_SCAN_CRON }}
             INBOX_LOOKBACK_MINUTES=${{ vars.INBOX_LOOKBACK_MINUTES }}
-
             MONGO_USER=${{ secrets.MONGO_USER }}
             MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
             MONGO_DB=${{ vars.MONGO_DB }}
