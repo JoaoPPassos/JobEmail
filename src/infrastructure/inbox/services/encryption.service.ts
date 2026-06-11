@@ -9,7 +9,7 @@ export class EncryptionService {
   private readonly key: Buffer;
 
   constructor(private readonly configService: ConfigService) {
-    const hex = this.configService.getOrThrow<string>('ENCRYPTION_KEY');
+    const hex = this.configService.getOrThrow<string>('EMAIL_ENCRYPTION_KEY');
     this.key = Buffer.from(hex, 'hex');
   }
 
