@@ -36,13 +36,20 @@ export class MongoUserInboxRepository {
       status: 'applied',
       lastStatusChangedAt: new Date(),
     };
+
+    await this.model.updateOne(
+      { userId },
+      { $setOnInsert: { jobs: [] } },
+      { upsert: true },
+    );
+
     const result = await this.model.findOneAndUpdate(
       { userId, 'jobs.jobId': { $ne: job.jobId } },
       { $push: { jobs: jobDoc } },
     );
     if (!result) {
       this.logger.warn(
-        `[addJob] No document updated — userId=${userId} jobId=${job.jobId} may not exist or already present`,
+        `[addJob] Job already present — userId=${userId} jobId=${job.jobId}`,
       );
     }
   }

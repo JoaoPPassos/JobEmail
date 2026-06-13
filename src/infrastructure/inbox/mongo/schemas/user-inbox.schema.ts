@@ -6,13 +6,13 @@ export type UserInboxDoc = HydratedDocument<UserInboxEntity>;
 @Schema({ collection: 'user_inboxes' })
 export class UserInboxEntity {
   @Prop({ required: true, unique: true })
-  userId: string;
+  userId!: string;
 
-  @Prop({ required: true })
-  email: string;
+  @Prop()
+  email?: string;
 
-  @Prop({ required: true })
-  encryptedPassword: string;
+  @Prop()
+  encryptedPassword?: string;
 
   @Prop({
     type: [
@@ -26,7 +26,7 @@ export class UserInboxEntity {
     ],
     default: [],
   })
-  jobs: Array<{
+  jobs!: Array<{
     jobId: string;
     company: string;
     role: string;

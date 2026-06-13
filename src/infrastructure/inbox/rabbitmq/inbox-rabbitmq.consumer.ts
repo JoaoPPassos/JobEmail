@@ -63,7 +63,7 @@ export class InboxRabbitmqConsumer implements OnModuleInit, OnModuleDestroy {
           await this.userInboxRepo.addJob(userId, job);
           this.channel.ack(msg);
           this.logger.log(
-            `[job.created] jobId=${job.jobId} saved for userId=${userId}`,
+            `[job.created] jobId=${job.jobId} processed for userId=${userId}`,
           );
         } catch (err) {
           this.logger.error('[job.created] Failed to process message', err);
