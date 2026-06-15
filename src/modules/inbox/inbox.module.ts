@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { UserInboxController } from './controllers/user-inbox.controller.js';
 import { MongooseModule } from '@nestjs/mongoose';
 import { InboxScannerService } from './inbox-scanner.service.js';
 import { ImapInboxService } from '../../infrastructure/inbox/services/imap-inbox.service.js';
@@ -18,6 +19,7 @@ import {
 } from '../../infrastructure/inbox/mongo/schemas/processed-email.schema.js';
 
 @Module({
+  controllers: [UserInboxController],
   imports: [
     MongooseModule.forFeature([
       { name: UserInboxEntity.name, schema: UserInboxSchema },

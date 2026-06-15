@@ -104,6 +104,17 @@ export class MongoUserInboxRepository {
     return result;
   }
 
+  async updatePassword(
+    userId: string,
+    encryptedPassword: string,
+  ): Promise<void> {
+    await this.model.findOneAndUpdate(
+      { userId },
+      { $set: { encryptedPassword } },
+      { upsert: true },
+    );
+  }
+
   async findAllWithCredentials(): Promise<UserInbox[]> {
     return this.model
       .find({ email: { $exists: true }, encryptedPassword: { $exists: true } })
